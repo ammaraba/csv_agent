@@ -8,7 +8,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+"""
+when the user uploads a csv file, make sure you generatea summary of that csv 
+and store the csv_summary with the csv somewhere (csv to be accesible via a link)
+example csv link: https://raw.githubusercontent.com/ronidas39/LLMtutorial/main/tutorial98/output.csv
 
+The summary needs to be generated only once per csv when the user uploads the CSV
+
+To generate each summary of the CSV..on an average it will require a total token usage (input+output) of 2700 tokens
+And a runtime of around 14secs per csv for the summary generation
+
+
+once done....
+when a user asks a query
+pass that query through the query router script to identify which CSV will be able to answer the user's question via the summaries
+The output of the query router script will be a csv name or id number which will relate to that specific CSV or 'none'
+
+when the output is 'none'....the same old copilot.live rag process will be followed wherein context will be fetched from weaviate db
+else if a csv_name or csv_id is returned then use the csv_agent with that specific csv and the user query
+
+the query router script on an average takes 0.8s per query 
+"""
 class CSVDescriptors:
     def __init__(self):
         self.descriptors = {}
@@ -72,7 +92,7 @@ def generate_dataframe_summary(df):
     )
     | dataframe_summary_prompt
     | ChatOpenAI(temperature=0,model="gpt-4")
-    | StrOutputParser()
+    # | StrOutputParser()
     )
     
     return summarise.invoke({"df_head": df.head().to_html(), "df_summary":summary_string, "df_tail": df.tail().to_html()})
@@ -109,28 +129,95 @@ def process_question(question, routing_chain_structure):
     output = routing_chain_structure.invoke({"question": question})
     return output
 
+import time
 
-# if __name__ == "__main__":
-#     # Initialize CSVDescriptors
-#     csv_descriptors = CSVDescriptors()
-#     # when user uploads a csv....store its summaries at that time
-#     # fetch those summaries stored somewhere and use it for query routing
-#     # if the output from LLM is none therefore no csv can supposedly answer user's question therefore now do Normal RAG
+def test_average_query_time(routing_chain, questions):
+    query_times = []
+    for question in questions:
+        start_time = time.time()
+        output = process_question(question, routing_chain)
+        print(output)
+        end_time = time.time()
+        query_time = end_time - start_time
+        query_times.append(query_time)
+    
+    average_time = sum(query_times) / len(query_times)
+    return average_time
 
 
-#     # df_example = pd.read_csv("https://raw.githubusercontent.com/ronidas39/LLMtutorial/main/tutorial98/output.csv")
-#     # output_example = generate_dataframe_summary(df_example)
-#     # csv1_link="https://raw.githubusercontent.com/MainakRepositor/Datasets/master/Wastebase/wastebase_scan_summary_202109F.csv"
+def calculate_avg_summary_time(csv_links):
+    summary_times = []
+    for link in csv_links:
+        start_time = time.time()
+        df = pd.read_csv(link)
+        print(generate_dataframe_summary(df).usage_metadata) # this calculates the token usage
+        end_time = time.time()
+        summary_time = end_time - start_time
+        summary_times.append(summary_time)
+    
+    average_time = sum(summary_times) / len(summary_times)
+    return average_time
 
 
-#     # Add CSV descriptors
-#     csv_descriptors.add_csv_descriptor("csv1", generate_dataframe_summary(pd.read_csv("https://raw.githubusercontent.com/ronidas39/LLMtutorial/main/tutorial98/output.csv")))
-#     csv_descriptors.add_csv_descriptor("csv2", generate_dataframe_summary(pd.read_csv("https://raw.githubusercontent.com/MainakRepositor/Datasets/master/Wastebase/wastebase_scan_summary_202109F.csv")))
 
-#     # Create routing chain
-#     routing_chain = create_routing_chain(csv_descriptors.get_csv_descriptors())
+if __name__ == "__main__":
+    # Initialize CSVDescriptors
+    csv_descriptors = CSVDescriptors()
+    # when user uploads a csv....store its summaries at that time
+    # fetch those summaries stored somewhere and use it for query routing
+    # if the output from LLM is none therefore no csv can supposedly answer user's question therefore now do Normal RAG
 
-#     # Process a question
-#     output = process_question("which country supports manufactufing more??", routing_chain)
 
-#     print(output)
+    # df_example = pd.read_csv("https://raw.githubusercontent.com/ronidas39/LLMtutorial/main/tutorial98/output.csv")
+    # output_example = generate_dataframe_summary(df_example)
+    # csv1_link="https://raw.githubusercontent.com/MainakRepositor/Datasets/master/Wastebase/wastebase_scan_summary_202109F.csv"
+
+
+    # # Add CSV descriptors
+    # csv_descriptors.add_csv_descriptor("csv1", generate_dataframe_summary(pd.read_csv("https://raw.githubusercontent.com/ronidas39/LLMtutorial/main/tutorial98/output.csv")))
+    # csv_descriptors.add_csv_descriptor("csv2", generate_dataframe_summary(pd.read_csv("https://raw.githubusercontent.com/MainakRepositor/Datasets/master/Wastebase/wastebase_scan_summary_202109F.csv")))
+
+    # # Create routing chain
+    # routing_chain = create_routing_chain(csv_descriptors.get_csv_descriptors())
+
+    # # Process a question
+    # output = process_question("What is the history of the Olympic Games??", routing_chain)
+
+    # print(output)
+    # related_questions_summary1 = [
+    # "How is the batting average calculated for each player in the dataset?",
+    # "Which player has the highest batting average in the dataset?",
+    # "How many players in the dataset have scored a century?",
+    # "What is the distribution of the number of matches played by players in the dataset?",
+    # "Can you compare the career durations of players with the highest runs scored?",
+    # "How many players have scored more than 10,000 runs in their career?",
+    # "What is the strike rate of players who have scored over 50 half-centuries?",
+    # "How many players have never been dismissed for a duck (zero runs)?",
+    # "What is the relationship between the number of balls faced and the batting average?",
+    # "Which player has hit the most sixes in their career?",
+    # "How does the number of matches played correlate with the total runs scored?",
+    # "Can we identify any trends in player performance based on their career duration?",
+    # "How many players have played over 100 matches in their career?",
+    # "What is the distribution of players' highest scores in the dataset?",
+    # "Are there any players with a strike rate above 150?",
+    # "Which player has been not out the most times?",
+    # "What is the average number of centuries scored by players in the dataset?",
+    # "How many players have hit over 200 fours in their career?",
+    # "Can you analyze the performance of players who have a career duration of over 20 years?",
+    # "Which player has the lowest batting average but has played a significant number of matches?"]
+
+
+    # average_query_time = test_average_query_time(routing_chain, related_questions_summary1)
+    # print(f"Average time taken per query: {average_query_time} seconds")
+
+
+    dataset_urls = [
+    "https://raw.githubusercontent.com/deepanshu88/data/master/sampledata.csv",
+    "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/healthexp.csv",
+    "https://raw.githubusercontent.com/plotly/datasets/master/data.csv",
+    "https://raw.githubusercontent.com/Opensourcefordatascience/Data-sets/master/blood_pressure.csv",
+    "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
+    ]
+
+    average_summary_time = calculate_avg_summary_time(dataset_urls)
+    print(f"Average time taken to generate a summary: {average_summary_time} seconds")
